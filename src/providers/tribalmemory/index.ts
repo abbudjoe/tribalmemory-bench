@@ -90,8 +90,8 @@ export class TribalMemoryProvider implements Provider {
     for (const session of sessions) {
       // Convert each message in the session to a memory
       for (const message of session.messages) {
-        // Build context with session metadata
-        const context: Record<string, unknown> = {
+        // Build context with session metadata (serialized as JSON string)
+        const contextObj: Record<string, unknown> = {
           sessionId: session.sessionId,
           role: message.role,
           speaker: message.speaker,
@@ -101,13 +101,13 @@ export class TribalMemoryProvider implements Provider {
         }
 
         if (message.timestamp) {
-          context.timestamp = message.timestamp
+          contextObj.timestamp = message.timestamp
         }
 
         const body = {
           content: message.content,
-          source_type: "agent_capture",
-          context,
+          source_type: "auto_capture",  // TribalMemory SourceType enum value
+          context: JSON.stringify(contextObj),  // API expects string, not object
           tags: [containerTag, `session:${session.sessionId}`, message.role],
         }
 
@@ -198,17 +198,32 @@ export class TribalMemoryProvider implements Provider {
       }
 
       // Return results in a format the benchmark can use
-      return data.results.map((r) => ({
-        id: r.memory.id,
-        content: r.memory.content,
-        score: r.similarity_score,
-        metadata: {
-          ...r.memory.context,
-          tags: r.memory.tags,
-          created_at: r.memory.created_at,
-          retrieval_method: r.retrieval_method,
-        },
-      }))
+      return data.results.map((r) => {
+        // Parse context if it's a JSON string (we store it stringified)
+        let parsedContext: Record<string, unknown> = {}
+        if (r.memory.context) {
+          try {
+            parsedContext = typeof r.memory.context === 'string' 
+              ? JSON.parse(r.memory.context) 
+              : r.memory.context
+          } catch {
+            // If parsing fails, use as-is or empty
+            parsedContext = {}
+          }
+        }
+        
+        return {
+          id: r.memory.id,
+          content: r.memory.content,
+          score: r.similarity_score,
+          metadata: {
+            ...parsedContext,
+            tags: r.memory.tags,
+            created_at: r.memory.created_at,
+            retrieval_method: r.retrieval_method,
+          },
+        }
+      })
     } catch (error) {
       logger.error(`Search error: ${error}`)
       return []
