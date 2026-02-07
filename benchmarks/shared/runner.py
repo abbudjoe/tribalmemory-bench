@@ -18,9 +18,12 @@ from .metrics import (
 
 console = Console()
 
-# Default batch size for ingestion
+# Batch size for ingestion: 20 balances API overhead vs memory usage.
+# Too small = many round trips; too large = timeouts on slow connections.
 DEFAULT_BATCH_SIZE = 20
-# Default concurrency for queries
+
+# Query concurrency: 10 provides good throughput without overwhelming
+# the server. Increase for high-capacity providers, decrease for rate limits.
 DEFAULT_QUERY_CONCURRENCY = 10
 
 

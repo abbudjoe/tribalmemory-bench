@@ -153,7 +153,9 @@ def check_expected_behavior(
         # Negative test: should NOT find relevant content
         if not retrieved:
             return (True, None, None)
-        # Check if retrieved content is actually relevant (simple heuristic)
+        # Check if retrieved content is actually relevant (simple heuristic).
+        # 30 chars ≈ 5-6 words - too short to be meaningful context.
+        # This is a rough filter; semantic relevance checking would be better.
         if len(combined) < 30:
             return (True, None, None)
         # Found content when shouldn't have
