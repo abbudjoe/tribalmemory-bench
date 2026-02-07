@@ -1,0 +1,60 @@
+name: "stale_address_rejection"
+description: "User moved - old address should not be used for delivery"
+category: "negative/stale_rejection"
+source: "original"
+
+conversations:
+  - session: 1
+    timestamp: "2023-06-01"
+    messages:
+      - role: user
+        content: "Can you send that to my address? It's 123 Oak Street, Apt 4B"
+      - role: assistant
+        content: "Got it, sending to 123 Oak Street, Apt 4B"
+      - role: user
+        content: "Thanks!"
+
+  - session: 2
+    timestamp: "2024-01-15"
+    messages:
+      - role: user
+        content: "I just moved to a new place last week"
+      - role: assistant
+        content: "Congrats on the new place! How's it going?"
+      - role: user
+        content: "Still unpacking but love it. Way more space."
+
+  # Note: User mentioned moving but didn't give new address
+
+task:
+  query: "Can you send me a package?"
+
+  expected_behavior:
+    should_retrieve: true
+    should_use:
+      - "User moved (session 2)"
+    should_ignore:
+      - "Old address 123 Oak Street (session 1)"
+    reasoning: "Old address is explicitly stale - user confirmed they moved"
+
+  success:
+    response_indicates:
+      - "ask for current address"
+      - "need your new address"
+      - "where should I send it"
+    response_does_not_indicate:
+      - "123 Oak Street"
+      - "Apt 4B"
+      - "sending to your address"
+
+failure_modes:
+  - type: "stale_usage"
+    description: "Used old address despite knowing user moved"
+    severity: "critical"
+  - type: "no_address_check"
+    description: "Didn't ask for address but didn't use old one"
+    severity: "low"
+
+evaluation:
+  method: "keyword_match"
+  requires_uncertainty_acknowledgment: true

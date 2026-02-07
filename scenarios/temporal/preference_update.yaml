@@ -1,0 +1,69 @@
+name: "vegetarian_preference_update"
+description: "User changed from meat-eater to vegetarian - system should use current preference"
+category: "temporal"
+source: "original"
+
+conversations:
+  - session: 1
+    timestamp: "2024-01-15"
+    messages:
+      - role: user
+        content: "I had the most amazing ribeye steak last night"
+      - role: assistant
+        content: "Oh nice! Where did you go?"
+      - role: user
+        content: "That steakhouse downtown. Best steak I've had in years."
+      - role: assistant
+        content: "I'll have to remember that recommendation!"
+
+  - session: 2
+    timestamp: "2024-06-20"
+    messages:
+      - role: user
+        content: "Big change - I've gone vegetarian now"
+      - role: assistant
+        content: "That's a significant change! What prompted it?"
+      - role: user
+        content: "Health reasons mostly, plus I watched some documentaries"
+      - role: assistant
+        content: "Makes sense. How are you finding it so far?"
+      - role: user
+        content: "Actually really good. Found some great veggie restaurants."
+
+task:
+  query: "What restaurant should I go to for dinner tonight?"
+  
+  expected_behavior:
+    should_retrieve: true
+    should_use: 
+      - "vegetarian preference from session 2"
+    should_ignore:
+      - "steak preference from session 1"
+    reasoning: "Most recent preference supersedes older preference"
+    
+  success:
+    response_indicates:
+      - "vegetarian options"
+      - "veggie restaurants"
+      - "plant-based"
+    response_does_not_indicate:
+      - "steakhouse"
+      - "ribeye"
+      - "meat"
+
+failure_modes:
+  - type: "stale_retrieval"
+    description: "Retrieved and used outdated steak preference"
+    severity: "high"
+  - type: "temporal_confusion" 
+    description: "Mixed old and new preferences in response"
+    severity: "medium"
+  - type: "no_retrieval"
+    description: "Failed to retrieve any food preference"
+    severity: "low"
+
+evaluation:
+  method: "keyword_match"  # or "llm_judge" for complex cases
+  metrics:
+    - "temporal_correctness"
+    - "preference_recency"
