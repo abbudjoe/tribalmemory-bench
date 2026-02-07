@@ -2,8 +2,15 @@
 
 Paper: https://arxiv.org/abs/2410.10813
 Dataset: https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned
+
+Why direct JSON download instead of HuggingFace datasets library?
+- The datasets library has pyarrow type coercion issues with the mixed-type
+  'answer' column (some answers are strings, some are integers).
+- Streaming mode was attempted but also fails on the same type coercion.
+- Direct JSON download is reliable and simple, with local file caching.
 """
 
+import json
 import asyncio
 import os
 from pathlib import Path
@@ -17,10 +24,14 @@ from ..shared.metrics import BenchmarkResult
 console = Console()
 
 DATASET_NAME = "xiaowu0162/longmemeval-cleaned"
-# Direct HuggingFace URLs for JSON download (avoids pyarrow type coercion issues)
+
+# Direct HuggingFace URLs for JSON download
+_HF_BASE_URL = (
+    "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main"
+)
 DATASET_URLS = {
-    "s": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_s_cleaned.json",  # noqa: E501
-    "m": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_m_cleaned.json",  # noqa: E501
+    "s": f"{_HF_BASE_URL}/longmemeval_s_cleaned.json",
+    "m": f"{_HF_BASE_URL}/longmemeval_m_cleaned.json",
 }
 CACHE_DIR = Path(__file__).parent / "data"
 
@@ -49,7 +60,6 @@ def download_dataset(variant: str = "s") -> list[dict]:
     # Use cached version if available
     if cache_path.exists():
         console.print(f"[blue]Loading cached dataset ({variant})...[/blue]")
-        import json
         return json.loads(cache_path.read_text())
 
     console.print(f"[blue]Downloading {DATASET_NAME} ({variant})...[/blue]")
@@ -61,7 +71,6 @@ def download_dataset(variant: str = "s") -> list[dict]:
 
     # Cache for future runs
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    import json
     cache_path.write_text(json.dumps(data))
 
     console.print(f"[green]Downloaded {len(data)} examples (cached)[/green]")
@@ -77,15 +86,19 @@ def parse_dataset(ds: list[dict]) -> tuple[list[dict], list[dict]]:
         across the entire dataset (sessions repeat across questions).
     """
     # Parse all sessions without filtering
-    return parse_dataset_filtered(ds, needed_sessions=None)
+    return _parse_dataset_filtered(ds, needed_sessions=None)
 
 
-def parse_dataset_filtered(
+def _parse_dataset_filtered(
     ds: list[dict],
     needed_sessions: set[str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """
     Parse LongMemEval dataset, optionally filtering to needed sessions.
+
+    This is an internal function used by parse_dataset() and run_longmemeval().
+    It's private because the filtering logic is an implementation detail of
+    the sampling optimization.
 
     Args:
         ds: Raw dataset examples
@@ -97,6 +110,7 @@ def parse_dataset_filtered(
     seen_sessions: set[str] = set()  # Track to avoid duplicates
     conversations = []
     questions = []
+    missing_id_count = 0  # Track synthetic ID usage for warning
 
     for example in ds:
         # Extract conversation history (haystack_sessions in this dataset)
@@ -106,7 +120,11 @@ def parse_dataset_filtered(
         # Each haystack session becomes a conversation
         for i, session in enumerate(haystack_sessions):
             # Create session ID for deduplication
-            session_id = session_ids[i] if i < len(session_ids) else f"session_{i}"
+            if i < len(session_ids):
+                session_id = session_ids[i]
+            else:
+                session_id = f"session_{i}"
+                missing_id_count += 1
 
             # Skip if filtering and not needed
             if needed_sessions is not None and session_id not in needed_sessions:
@@ -144,6 +162,13 @@ def parse_dataset_filtered(
             "category": example.get("question_type", "unknown"),
             "answer_session_ids": example.get("answer_session_ids", []),
         })
+
+    # Warn if we had to use synthetic session IDs (indicates dataset issue)
+    if missing_id_count > 0:
+        console.print(
+            f"[yellow]Warning: {missing_id_count} sessions missing IDs, "
+            f"used synthetic IDs[/yellow]"
+        )
 
     return conversations, questions
 
@@ -225,7 +250,7 @@ async def run_longmemeval(
     console.print(f"  Needed sessions: {len(needed_sessions)}")
 
     # Parse ONLY the sampled questions (filters conversations internally)
-    conversations, questions = parse_dataset_filtered(raw_questions, needed_sessions)
+    conversations, questions = _parse_dataset_filtered(raw_questions, needed_sessions)
 
     console.print(f"\n[bold]Dataset parsed:[/bold]")
     console.print(f"  Conversations: {len(conversations)}")
