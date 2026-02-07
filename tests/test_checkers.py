@@ -122,3 +122,11 @@ class TestCreateChecker:
     def test_invalid_method(self):
         with pytest.raises(ValueError):
             create_checker("invalid")
+    
+    def test_invalid_threshold_high(self):
+        with pytest.raises(ValueError):
+            create_checker("fuzzy", threshold=1.5)
+    
+    def test_invalid_threshold_negative(self):
+        with pytest.raises(ValueError):
+            create_checker("fuzzy", threshold=-0.1)

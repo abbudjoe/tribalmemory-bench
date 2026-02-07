@@ -133,6 +133,8 @@ async def run_convomem_cmd(args):
 
 async def run_scenarios_cmd(args):
     """Run scenario-based evaluation."""
+    import json
+    import aiofiles
     from .shared.providers import TribalMemoryProvider
     from .shared.scenario_runner import load_scenarios_from_dir, run_scenario_suite
     
@@ -144,7 +146,7 @@ async def run_scenarios_cmd(args):
         console.print(f"[red]Scenario path not found: {scenario_path}[/red]")
         return
     
-    scenarios = load_scenarios_from_dir(scenario_path)
+    scenarios = await load_scenarios_from_dir(scenario_path)
     
     if not scenarios:
         console.print(f"[yellow]No scenarios found in {scenario_path}[/yellow]")
@@ -156,21 +158,22 @@ async def run_scenarios_cmd(args):
     ) as provider:
         result = await run_scenario_suite(scenarios, provider)
     
-    # Save results
+    # Save results (async)
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    import json
     result_path = output_dir / f"scenarios-{args.path.replace('/', '-')}.json"
-    with open(result_path, "w") as f:
-        json.dump({
-            "suite": result.suite_name,
-            "total": result.total,
-            "passed": result.passed,
-            "pass_rate": result.pass_rate,
-            "by_category": result.by_category,
-            "avg_latency_ms": result.avg_latency_ms,
-        }, f, indent=2)
+    result_data = json.dumps({
+        "suite": result.suite_name,
+        "total": result.total,
+        "passed": result.passed,
+        "pass_rate": result.pass_rate,
+        "by_category": result.by_category,
+        "avg_latency_ms": result.avg_latency_ms,
+    }, indent=2)
+    
+    async with aiofiles.open(result_path, "w") as f:
+        await f.write(result_data)
     
     console.print(f"\n[green]Results saved to {result_path}[/green]")
 

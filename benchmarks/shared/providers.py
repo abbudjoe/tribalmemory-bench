@@ -83,17 +83,29 @@ class TribalMemoryProvider(Provider):
         path: str,
         **kwargs
     ) -> httpx.Response:
-        """Make HTTP request with exponential backoff retry."""
+        """Make HTTP request with exponential backoff retry.
+        
+        Only retries on transient errors (5xx, network errors).
+        Client errors (4xx) are raised immediately as they're deterministic.
+        """
         last_error = None
         for attempt in range(self.max_retries):
             try:
                 response = await getattr(self.client, method)(path, **kwargs)
                 response.raise_for_status()
                 return response
-            except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            except httpx.HTTPStatusError as e:
+                # Don't retry client errors (4xx) - they're deterministic
+                if 400 <= e.response.status_code < 500:
+                    raise
                 last_error = e
                 if attempt < self.max_retries - 1:
                     wait_time = 2 ** attempt  # 1s, 2s, 4s
+                    await asyncio.sleep(wait_time)
+            except httpx.RequestError as e:
+                last_error = e
+                if attempt < self.max_retries - 1:
+                    wait_time = 2 ** attempt
                     await asyncio.sleep(wait_time)
         raise last_error
     

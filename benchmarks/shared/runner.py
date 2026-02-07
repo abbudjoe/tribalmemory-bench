@@ -13,6 +13,7 @@ from .metrics import (
     BenchmarkResult,
     QuestionResult,
     compute_category_results,
+    compute_reciprocal_rank,
 )
 
 console = Console()
@@ -82,7 +83,11 @@ async def run_benchmark(
             try:
                 await provider.store_batch(batch)
             except Exception as e:
-                # Fall back to sequential on batch failure
+                # Log batch failure and fall back to sequential
+                console.print(
+                    f"[yellow]Batch ingestion failed ({e}), "
+                    f"falling back to sequential[/yellow]"
+                )
                 for chunk in batch:
                     await provider.store(chunk["content"], chunk.get("context"))
             progress.advance(task, len(batch))
@@ -118,6 +123,7 @@ async def run_benchmark(
     category_results = compute_category_results(results)
     total_correct = sum(1 for r in results if r.correct)
     avg_latency = sum(r.latency_ms for r in results) / len(results) if results else 0
+    overall_mrr = sum(r.reciprocal_rank for r in results) / len(results) if results else 0
     
     benchmark_result = BenchmarkResult(
         benchmark=name,
@@ -127,6 +133,7 @@ async def run_benchmark(
         total_correct=total_correct,
         overall_accuracy=total_correct / len(results) if results else 0,
         avg_latency_ms=avg_latency,
+        mrr=overall_mrr,
         categories=category_results,
         questions=results,
         metadata={
@@ -228,6 +235,9 @@ async def run_question(
     for k in [1, 5, 10]:
         hit_at_k[k] = answer_checker(expected, retrieved[:k])
     
+    # Compute reciprocal rank
+    rr = compute_reciprocal_rank(expected, retrieved, answer_checker)
+    
     return QuestionResult(
         question_id=question_id,
         category=category,
@@ -237,6 +247,7 @@ async def run_question(
         correct=correct,
         latency_ms=latency_ms,
         hit_at_k=hit_at_k,
+        reciprocal_rank=rr,
     )
 
 

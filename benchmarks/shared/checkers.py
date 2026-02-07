@@ -42,7 +42,12 @@ def phrase_checker(expected: str, retrieved: list[str]) -> bool:
     """
     Check for key phrases from expected answer.
     
-    Splits expected on common delimiters and checks if any phrase matches.
+    Splits expected on common delimiters (comma, semicolon, pipe) and checks
+    if any phrase matches. Phrases with 2 or fewer characters are ignored
+    to avoid false positives from articles and short words.
+    
+    Note: Short meaningful answers like "NY" or "UK" may be missed.
+    Consider using fuzzy_checker for such cases.
     """
     if not expected or not retrieved:
         return False
@@ -148,10 +153,15 @@ def abstention_checker(expected: str, retrieved: list[str]) -> bool:
         return True
     
     # Check if retrieved content is actually relevant
-    # (This is a heuristic - LLM judge would be more accurate)
+    # NOTE: This is a simplistic length-based heuristic. It has limitations:
+    # - Short but highly relevant content (e.g., "blue") would be missed
+    # - Only checks top 3 results
+    # - Doesn't actually assess semantic relevance
+    # Future improvement: Use LLM-based relevance scoring for accuracy
     combined = " ".join(normalize_text(r) for r in retrieved[:3])  # Top 3
     
     # If the combined content is short or generic, likely not relevant
+    # 50 chars is arbitrary - roughly 10 words
     if len(combined) < 50:
         return True
     
@@ -167,11 +177,17 @@ def create_checker(
     
     Args:
         method: One of "substring", "phrase", "fuzzy", "abstention"
-        threshold: Threshold for fuzzy matching
+        threshold: Threshold for fuzzy matching (0.0 to 1.0)
     
     Returns:
         Checker function
+    
+    Raises:
+        ValueError: If method is unknown or threshold is out of range
     """
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError(f"Threshold must be between 0 and 1, got {threshold}")
+    
     if method == "substring":
         return substring_checker
     elif method == "phrase":

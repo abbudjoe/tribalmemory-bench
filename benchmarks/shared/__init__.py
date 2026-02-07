@@ -23,6 +23,7 @@ from .scenario_runner import (
     run_scenario_suite,
     load_scenario,
     load_scenarios_from_dir,
+    check_expected_behavior,
     ScenarioResult,
     ScenarioSuiteResult,
 )

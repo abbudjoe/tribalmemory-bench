@@ -3,6 +3,7 @@
 import asyncio
 import time
 import yaml
+import aiofiles
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -39,21 +40,22 @@ class ScenarioSuiteResult:
     avg_latency_ms: float = 0.0
 
 
-def load_scenario(path: Path) -> dict:
-    """Load a scenario from YAML file."""
-    with open(path) as f:
-        return yaml.safe_load(f)
+async def load_scenario(path: Path) -> dict:
+    """Load a scenario from YAML file (async)."""
+    async with aiofiles.open(path) as f:
+        content = await f.read()
+        return yaml.safe_load(content)
 
 
-def load_scenarios_from_dir(dir_path: Path) -> list[dict]:
-    """Load all scenarios from a directory."""
+async def load_scenarios_from_dir(dir_path: Path) -> list[dict]:
+    """Load all scenarios from a directory (async)."""
     scenarios = []
     for path in sorted(dir_path.glob("**/*.yaml")):
         # Skip combined files
         if path.name.startswith("_"):
             continue
         try:
-            scenario = load_scenario(path)
+            scenario = await load_scenario(path)
             if scenario:
                 scenario["_path"] = str(path)
                 scenarios.append(scenario)
@@ -162,8 +164,12 @@ def check_expected_behavior(
         return (False, "no_retrieval", "No memories retrieved")
     
     # Check success criteria
-    response_indicates = success.get("response_indicates", success.get("contains", []))
-    response_not_indicates = success.get("response_does_not_indicate", success.get("not_contains", []))
+    response_indicates = success.get(
+        "response_indicates", success.get("contains", [])
+    )
+    response_not_indicates = success.get(
+        "response_does_not_indicate", success.get("not_contains", [])
+    )
     
     # Check positive indicators
     found_positive = False

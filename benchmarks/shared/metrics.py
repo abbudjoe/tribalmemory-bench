@@ -88,7 +88,8 @@ class BenchmarkResult:
             "",
             f"**Provider:** {self.provider}",
             f"**Timestamp:** {self.timestamp}",
-            f"**Overall Accuracy:** {self.overall_accuracy:.1%} ({self.total_correct}/{self.total_questions})",
+            f"**Overall Accuracy:** {self.overall_accuracy:.1%} "
+            f"({self.total_correct}/{self.total_questions})",
             f"**MRR:** {self.mrr:.3f}",
             f"**Avg Latency:** {self.avg_latency_ms:.1f}ms",
             "",
@@ -99,10 +100,11 @@ class BenchmarkResult:
         ]
         
         for cat in self.categories:
+            acc = f"{cat.accuracy:.1%} ({cat.correct}/{cat.total})"
+            hits = f"{cat.hit_at_1:.1%} | {cat.hit_at_5:.1%} | {cat.hit_at_10:.1%}"
             lines.append(
-                f"| {cat.category} | {cat.accuracy:.1%} ({cat.correct}/{cat.total}) | "
-                f"{cat.mrr:.3f} | {cat.hit_at_1:.1%} | {cat.hit_at_5:.1%} | {cat.hit_at_10:.1%} | "
-                f"{cat.avg_latency_ms:.1f}ms |"
+                f"| {cat.category} | {acc} | {cat.mrr:.3f} | "
+                f"{hits} | {cat.avg_latency_ms:.1f}ms |"
             )
         
         # Add metadata
@@ -205,13 +207,30 @@ def compare_results(
     
     Returns dict with comparison metrics.
     """
+    # Determine winners for each metric
+    winner_acc = (
+        result_a.provider
+        if result_a.overall_accuracy > result_b.overall_accuracy
+        else result_b.provider
+    )
+    winner_mrr = (
+        result_a.provider
+        if result_a.mrr > result_b.mrr
+        else result_b.provider
+    )
+    winner_lat = (
+        result_a.provider
+        if result_a.avg_latency_ms < result_b.avg_latency_ms
+        else result_b.provider
+    )
+    
     return {
         "provider_a": result_a.provider,
         "provider_b": result_b.provider,
         "accuracy_diff": result_a.overall_accuracy - result_b.overall_accuracy,
         "mrr_diff": result_a.mrr - result_b.mrr,
         "latency_diff_ms": result_a.avg_latency_ms - result_b.avg_latency_ms,
-        "winner_accuracy": result_a.provider if result_a.overall_accuracy > result_b.overall_accuracy else result_b.provider,
-        "winner_mrr": result_a.provider if result_a.mrr > result_b.mrr else result_b.provider,
-        "winner_latency": result_a.provider if result_a.avg_latency_ms < result_b.avg_latency_ms else result_b.provider,
+        "winner_accuracy": winner_acc,
+        "winner_mrr": winner_mrr,
+        "winner_latency": winner_lat,
     }
